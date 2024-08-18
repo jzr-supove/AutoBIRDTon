@@ -7,13 +7,14 @@ import tkinter as tk
 from datetime import datetime
 from tkinter import ttk, font
 from typing import Optional
+from dotenv import load_dotenv
 
 import requests
 import websocket
-from dotenv import load_dotenv
 
 load_dotenv()
 logging.getLogger('websocket').setLevel(logging.ERROR)
+
 
 USER_AGENT = os.getenv('USER_AGENT')
 SEC_CH_UA = os.getenv('SEC_CH_UA')
@@ -22,6 +23,7 @@ SEC_CH_UA = os.getenv('SEC_CH_UA')
 class GameClient:
     URL = "https://birdton.site/auth"
     WS_URL = "wss://birdton.site/ws?auth={key}"
+    ADS_URL = os.getenv('ADS_URL')
 
     def __init__(self, tg_data: str, ui):
         self.tg_data = tg_data
@@ -67,12 +69,7 @@ class GameClient:
                 self.profile["high_score"] = d["high_score"]
                 self.profile["balance"] = d["balance"]
                 self.profile["score"] = d["score"]
-
-                self.is_playing = False
-                self.game_id = None
-                self.score = 0
-                self.ui.log("Game saved")
-                self.ui.game_finished()
+                threading.Thread(target=self.watch_ads).start()
 
     def on_open(self, ws):
         self.ui.log("WebSocket connection opened")
@@ -126,6 +123,48 @@ class GameClient:
             data = json.dumps({"event_type": "game_end", "data": self.game_id})
             self.ui.log(f"[SENT] {data}")
             self.ws.send(data)
+
+    def watch_ads(self):
+        if self.is_connected and self.is_playing:
+            for _ in range(3):
+                resp = requests.get(self.ADS_URL, headers=ads_headers)
+                if resp.status_code != 200:
+                    self.ui.log(f"[ADS] Failed to get an ad | <{resp.status_code}>: {resp.content}")
+                    break
+
+                data = resp.json()
+                trackings = {
+                    i["name"]: i["value"] for i in data["banner"]["trackings"] if
+                    i["name"] in {"render", "show", "reward"}
+                }
+
+                resp = requests.get(trackings["render"], headers=ads_headers)
+                if resp.status_code != 200:
+                    self.ui.log(f"[ADS] Failed to render | <{resp.status_code}>: {resp.content}")
+                    break
+
+                time.sleep(2)
+                resp = requests.get(trackings["show"], headers=ads_headers)
+                if resp.status_code != 200:
+                    self.ui.log(f"[ADS] Failed to show | <{resp.status_code}>: {resp.content}")
+                    break
+
+                time.sleep(11)
+                self.ws.send(json.dumps({"event_type": "ad_multiply"}))
+
+                time.sleep(2)
+                resp = requests.get(trackings["reward"], headers=ads_headers)
+                if resp.status_code != 200:
+                    self.ui.log(f"[ADS] Failed to get reward | <{resp.status_code}>: {resp.content}")
+                    break
+
+                self.ui.log(f"[ADS] Ad reward {_ + 1} received")
+
+        self.is_playing = False
+        self.game_id = None
+        self.score = 0
+        self.ui.log("Game saved")
+        self.ui.game_finished()
 
     def save(self, *, profile: bool = False, misc: bool = False):
         if profile:
@@ -376,6 +415,21 @@ request_headers = {
     "sec-fetch-dest": "empty",
     "sec-fetch-mode": "cors",
     "sec-fetch-site": "same-origin"
+}
+
+ads_headers = {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9,ru;q=0.8",
+    "cache-control": "no-cache",
+    "pragma": "no-cache",
+    "sec-ch-ua": SEC_CH_UA,
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": '"Android"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "cross-site",
+    "Referer": "https://birdton.site/",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
 }
 
 ws_headers = {
