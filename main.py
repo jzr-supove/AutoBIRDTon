@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 import threading
 import time
 import tkinter as tk
@@ -25,9 +26,9 @@ class GameClient:
     WS_URL = "wss://birdton.site/ws?auth={key}"
     ADS_URL = os.getenv('ADS_URL')
 
-    def __init__(self, tg_data: str, ui):
+    def __init__(self, tg_data: dict, ui):
         self.tg_data = tg_data
-        self.ui = ui
+        self.ui: FlappyBirdAutoPlayerUI = ui
         self.is_connected = False
         self.is_playing = False
         self.score = 0
@@ -73,7 +74,7 @@ class GameClient:
 
     def on_open(self, ws):
         self.ui.log("WebSocket connection opened")
-        auth_data = json.dumps({"event_type": "auth", "data": self.tg_data})
+        auth_data = json.dumps({"event_type": "auth", "data": json.dumps(self.tg_data, ensure_ascii=False)})
         self.is_connected = True
         self.ws.send(auth_data)
         self.ui.log(f"[SENT] {auth_data}")
@@ -84,13 +85,13 @@ class GameClient:
         self.ui.log(f"WebSocket connection closed: {close_status_code} - {close_msg}")
 
     def authorize(self):
-        resp = requests.post(self.URL, headers=request_headers, data=self.tg_data)
+        resp = requests.post(self.URL, headers=request_headers, json=self.tg_data)
         if resp.status_code != 200:
             raise ValueError(f"Failed to authorize. Status Code: {resp.status_code}\nResponse:\n{resp.content}")
 
         self.profile = resp.json()
 
-        user = json.loads(self.tg_data)["initDataUnsafe"]["user"]
+        user = self.tg_data["initDataUnsafe"]["user"]
         self.profile["name"] = f"{user['first_name']} {user['last_name']}"
 
         self.profile["update_time"] = time.time()
@@ -125,46 +126,61 @@ class GameClient:
             self.ws.send(data)
 
     def watch_ads(self):
-        if self.is_connected and self.is_playing:
-            for _ in range(3):
-                resp = requests.get(self.ADS_URL, headers=ads_headers)
-                if resp.status_code != 200:
-                    self.ui.log(f"[ADS] Failed to get an ad | <{resp.status_code}>: {resp.content}")
-                    break
+        self.ui.log(f"[ADS] Skipping watching ads")
 
-                data = resp.json()
-                trackings = {
-                    i["name"]: i["value"] for i in data["banner"]["trackings"] if
-                    i["name"] in {"render", "show", "reward"}
-                }
-
-                resp = requests.get(trackings["render"], headers=ads_headers)
-                if resp.status_code != 200:
-                    self.ui.log(f"[ADS] Failed to render | <{resp.status_code}>: {resp.content}")
-                    break
-
-                time.sleep(2)
-                resp = requests.get(trackings["show"], headers=ads_headers)
-                if resp.status_code != 200:
-                    self.ui.log(f"[ADS] Failed to show | <{resp.status_code}>: {resp.content}")
-                    break
-
-                time.sleep(11)
-                self.ws.send(json.dumps({"event_type": "ad_multiply"}))
-
-                time.sleep(2)
-                resp = requests.get(trackings["reward"], headers=ads_headers)
-                if resp.status_code != 200:
-                    self.ui.log(f"[ADS] Failed to get reward | <{resp.status_code}>: {resp.content}")
-                    break
-
-                self.ui.log(f"[ADS] Ad reward {_ + 1} received")
+        # if self.is_connected and self.is_playing:
+        #     self.ui.log(f"[ADS] Starting watching 3 ads")
+        #     for _ in range(3):
+        #         self.ui.log(f"[ADS] Starting watching ad #{_ + 1}")
+        #
+        #         resp = requests.get(self.ADS_URL, headers=ads_headers)
+        #         if resp.status_code != 200:
+        #             self.ui.log(f"[ADS] Failed to get an ad | <{resp.status_code}>: {resp.content}")
+        #             break
+        #
+        #         data = resp.json()
+        #         if "banner" not in data:
+        #             self.ui.log("[ADS] Not ready, skipping...")
+        #             self.ui.log(f"[ADS] response={data}")
+        #             break
+        #
+        #         trackings = {
+        #             i["name"]: i["value"] for i in data["banner"]["trackings"] if
+        #             i["name"] in {"render", "show", "reward"}
+        #         }
+        #
+        #         resp = requests.get(trackings["render"], headers=ads_headers)
+        #         if resp.status_code != 200:
+        #             self.ui.log(f"[ADS] Failed to render | <{resp.status_code}>: {resp.content}")
+        #             break
+        #
+        #         time.sleep(2)
+        #         resp = requests.get(trackings["show"], headers=ads_headers)
+        #         if resp.status_code != 200:
+        #             self.ui.log(f"[ADS] Failed to show | <{resp.status_code}>: {resp.content}")
+        #             break
+        #
+        #         time.sleep(11)
+        #         self.ws.send(json.dumps({"event_type": "ad_multiply"}))
+        #
+        #         time.sleep(2)
+        #         resp = requests.get(trackings["reward"], headers=ads_headers)
+        #         if resp.status_code != 200:
+        #             self.ui.log(f"[ADS] Failed to get reward | <{resp.status_code}>: {resp.content}")
+        #             break
+        #
+        #         self.ui.log(f"[ADS] Ad reward {_ + 1} received")
 
         self.is_playing = False
         self.game_id = None
         self.score = 0
         self.ui.log("Game saved")
         self.ui.game_finished()
+
+        rand_sleep = random.randint(15, 30)
+        self.ui.log(f"Waiting for {rand_sleep} seconds before starting next loop...")
+        time.sleep(rand_sleep)
+        self.ui.start_game(randomize_score=True)
 
     def save(self, *, profile: bool = False, misc: bool = False):
         if profile:
@@ -258,7 +274,7 @@ class FlappyBirdAutoPlayerUI:
             "recharges_left", "is_combo_completed"
         ]
         for i, info in enumerate(profile_info):
-            label = ttk.Label(self.profile_frame, text=f"{info.replace("_", " ").title()}:")
+            label = ttk.Label(self.profile_frame, text=f"{info.replace('_', ' ').title()}:")
             label.grid(row=i, column=0, sticky="w", padx=10, pady=5)
             value_label = ttk.Label(self.profile_frame, text="N/A")
             value_label.grid(row=i, column=1, sticky="w", padx=10, pady=5)
@@ -321,16 +337,23 @@ class FlappyBirdAutoPlayerUI:
         self.console.see(tk.END)
 
     def connect_websocket(self):
-        auth_key = self.auth_entry.get()
-        self.log(f"Attempting to connect with key: {auth_key}")
+        auth_key = self.auth_entry.get().strip("'").strip('"')
+        try:
+            auth_key_dict = json.loads(auth_key)
+        except Exception as e:
+            self.log(f"Invalid auth key format, provide valid JSON string!\nException: {e}")
+            return
 
-        self.game_client = GameClient(auth_key, self)
+        self.log(f"Attempting to connect with key: {auth_key_dict}")
+
+        self.game_client = GameClient(tg_data=auth_key_dict, ui=self)
         try:
             profile = self.game_client.authorize()
             self.update_profile_info(profile)
 
             # Hide auth frame and show content
             self.auth_frame.pack_forget()
+            self.console_frame.pack_forget()
             self.content_frame.pack(fill="both", expand=True, pady=20)
             self.console_frame.pack(fill="x", pady=(20, 0))
 
@@ -344,14 +367,17 @@ class FlappyBirdAutoPlayerUI:
             if key in self.profile_labels:
                 self.profile_labels[key].config(text=str(value))
 
-    def start_game(self):
+    def start_game(self, randomize_score=False):
         if not self.game_active and self.game_client and self.game_client.is_connected:
             try:
                 self.target_score = int(self.score_entry.get())
 
-                if self.game_client.profile["energy"] < 1:
-                    self.log("Not enough energy to start the game.")
-                    return
+                if randomize_score:
+                    self.target_score = random.randint(abs(self.target_score - 100), self.target_score + 50)
+
+                # if self.game_client.profile["energy"] < 1:
+                #     self.log("Not enough energy to start the game.")
+                #     return
 
                 self.log(f"Starting game. Target score: {self.target_score}")
                 self.current_score = 0
@@ -414,7 +440,9 @@ request_headers = {
     "sec-ch-ua-platform": '"Android"',
     "sec-fetch-dest": "empty",
     "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-origin"
+    "sec-fetch-site": "same-origin",
+    "Referer": "https://birdton.site/",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
 }
 
 ads_headers = {
