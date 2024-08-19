@@ -2,3 +2,6 @@
 .venv
 temp/
 .env
+__pycache__
+misc_data.json
+profile.json
