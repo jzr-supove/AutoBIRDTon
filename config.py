@@ -3,17 +3,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-USER_AGENT = getenv('USER_AGENT')
-SEC_CH_UA = getenv('SEC_CH_UA')
-ADS_URL = getenv('ADS_URL')
+USER_AGENT = getenv('USER_AGENT') or "Mozilla/5.0 (Linux; Android 13; SM-A536B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
+SEC_CH_UA = getenv('SEC_CH_UA') or "\"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"116\", \"Google Chrome\";v=\"116\""
+ADS_URL = "https://api.adsgram.ai/adv?blockId=801&tg_id={user_id}&tg_platform=android&platform=Android&language=en&chat_type=sender&chat_instance={chat_instance}"
 
 
 request_headers = {
     "accept": "*/*",
     "accept-language": "en-US,en;q=0.9",
-    "cache-control": "no-cache",
     "content-type": "application/json",
-    "pragma": "no-cache",
     "user-agent": USER_AGENT,
     "sec-ch-ua": SEC_CH_UA,
     "sec-ch-ua-mobile": "?1",
@@ -28,8 +26,6 @@ request_headers = {
 ads_headers = {
     "accept": "*/*",
     "accept-language": "en-US,en;q=0.9,ru;q=0.8",
-    "cache-control": "no-cache",
-    "pragma": "no-cache",
     "sec-ch-ua": SEC_CH_UA,
     "sec-ch-ua-mobile": "?1",
     "sec-ch-ua-platform": '"Android"',

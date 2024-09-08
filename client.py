@@ -73,6 +73,13 @@ class GameClient:
             "update_time": 0.0
         }
 
+        temp = tg_data.get("initDataUnsafe")
+        if not temp:
+            self.ui.log("Invalid tg_data, key 'initDataUnsafe' not found")
+            raise ValueError("Invalid tg_data, key 'initDataUnsafe' not found")
+
+        self.ADS_URL = self.ADS_URL.format(user_id=temp["user"]["id"], chat_instance=temp["chat_instance"])
+
     def on_message(self, ws, message: str):
         self.ui.log(f"[RECV] {message}")
 
