@@ -78,7 +78,7 @@ class GameClient:
             self.ui.log("Invalid tg_data, key 'initDataUnsafe' not found")
             raise ValueError("Invalid tg_data, key 'initDataUnsafe' not found")
 
-        self.ADS_URL = self.ADS_URL.format(user_id=temp["user"]["id"], chat_instance=temp["chat_instance"])
+        self.ADS_URL = self.ADS_URL.format(user_id=temp["user"]["id"])
 
     def on_message(self, ws, message: str):
         self.ui.log(f"[RECV] {message}")
