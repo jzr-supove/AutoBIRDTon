@@ -222,6 +222,9 @@ class AutoBIRDTonGUI:
             self.log(f"Invalid auth key format, provide valid JSON string!\nException: {e}")
             return
 
+        if auth_key_dict.get("platform") != "android":
+            auth_key_dict["platform"] = "android"
+
         self.log(f"Attempting to connect with key: {auth_key_dict}")
 
         self.game_client = GameClient(tg_data=auth_key_dict, ui=self)
